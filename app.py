@@ -7,6 +7,7 @@ import os
 import io
 import logging
 from werkzeug.utils import secure_filename
+from config import Config
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -89,10 +90,13 @@ def predict_diagnosis(image_tensor):
             # 클래스 라벨 매핑 (실제 프로젝트에 맞게 수정 필요)
             class_labels = {
                 0: '정상',
-                1: '피부염',
-                2: '습진',
-                3: '건선',
-                4: '기타'
+                1: '여드름',
+                2: '양성종양',
+                3: '수포성질환',
+                4: '습진',
+                5: '루푸스',
+                6: '피부암',
+                7: '백반증'
             }
             
             predicted_class = predicted.item()
@@ -190,6 +194,10 @@ def server_error(e):
     return jsonify({'error': '서버 내부 오류가 발생했습니다.'}), 500
 
 if __name__ == '__main__':
+    # 설정 적용
+    Config.init_app(app)
+    logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
+    
     # 모델 디렉토리 생성
     os.makedirs('models', exist_ok=True)
     
@@ -198,4 +206,4 @@ if __name__ == '__main__':
     
     # 서버 시작
     logger.info("질병진단 AI 서버를 시작합니다...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
