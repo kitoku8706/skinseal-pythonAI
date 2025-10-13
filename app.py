@@ -25,7 +25,7 @@ def allowed_file(filename):
     """파일 확장자 검증"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
-def create_efficientnet_model(num_classes=8):
+def create_efficientnet_model(num_classes=22):
     """EfficientNet 모델 아키텍처 생성"""
     try:
         # torchvision의 EfficientNet 사용
