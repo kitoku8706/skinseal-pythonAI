@@ -14,7 +14,7 @@ class Config:
     
     # Flask 설정
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+    DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'  # 기본값을 False로 변경
     
     # 서버 설정
     HOST = os.environ.get('HOST', '0.0.0.0')

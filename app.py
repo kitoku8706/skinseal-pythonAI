@@ -27,6 +27,24 @@ def allowed_file(filename):
     """파일 확장자 검증"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def create_efficientnet_model(num_classes=8):
+    """EfficientNet 모델 아키텍처 생성"""
+    try:
+        # torchvision의 EfficientNet 사용
+        import torchvision.models as models
+        model = models.efficientnet_b0(weights=None)
+        
+        # 분류기 레이어 수정
+        model.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(p=0.2, inplace=True),
+            torch.nn.Linear(model.classifier[1].in_features, num_classes)
+        )
+        
+        return model
+    except Exception as e:
+        logger.error(f"모델 아키텍처 생성 오류: {str(e)}")
+        return None
+
 def load_model():
     """PyTorch 모델 로드"""
     global model, device
@@ -35,8 +53,17 @@ def load_model():
         model_path = 'models/20251006_212412_best_efficientnet.pth'
         
         if os.path.exists(model_path):
-            model = torch.load(model_path, map_location=device)
+            # 모델 아키텍처 생성
+            model = create_efficientnet_model(num_classes=8)
+            if model is None:
+                return
+            
+            # state_dict 로드
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model = model.to(device)
             model.eval()
+            
             logger.info(f"모델이 성공적으로 로드되었습니다: {model_path}")
         else:
             logger.warning(f"모델 파일을 찾을 수 없습니다: {model_path}")
@@ -201,9 +228,12 @@ if __name__ == '__main__':
     # 모델 디렉토리 생성
     os.makedirs('models', exist_ok=True)
     
-    # 모델 로드
+    # 모델 로드 (실패해도 서버는 계속 시작)
     load_model()
     
     # 서버 시작
     logger.info("질병진단 AI 서버를 시작합니다...")
-    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
+    logger.info(f"모델 로드 상태: {'성공' if model is not None else '실패 (모델 없이 실행)'}")
+    
+    # 네트워크 드라이브 문제 해결을 위해 디버그 모드 강제 비활성화
+    app.run(host=Config.HOST, port=Config.PORT, debug=False)
