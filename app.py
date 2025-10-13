@@ -14,10 +14,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 최대 파일 크기
 
-# 허용된 파일 확장자
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+# 허용된 파일 확장자는 Config에서 가져옴
 
 # 모델 글로벌 변수
 model = None
@@ -25,7 +23,7 @@ device = None
 
 def allowed_file(filename):
     """파일 확장자 검증"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
 def create_efficientnet_model(num_classes=8):
     """EfficientNet 모델 아키텍처 생성"""
