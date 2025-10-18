@@ -4,6 +4,7 @@
 """
 
 import os
+import secrets
 from dotenv import load_dotenv
 
 # .env 파일 로드
@@ -13,8 +14,8 @@ class Config:
     """애플리케이션 설정 클래스"""
     
     # Flask 설정
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+    DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'  # 기본값을 False로 변경
     
     # 서버 설정
     HOST = os.environ.get('HOST', '0.0.0.0')

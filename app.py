@@ -7,16 +7,15 @@ import os
 import io
 import logging
 from werkzeug.utils import secure_filename
+from config import Config
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB 최대 파일 크기
 
-# 허용된 파일 확장자
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+# 허용된 파일 확장자는 Config에서 가져옴
 
 # 모델 글로벌 변수
 model = None
@@ -24,7 +23,25 @@ device = None
 
 def allowed_file(filename):
     """파일 확장자 검증"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
+
+def create_efficientnet_model(num_classes=22):
+    """EfficientNet 모델 아키텍처 생성"""
+    try:
+        # torchvision의 EfficientNet 사용
+        import torchvision.models as models
+        model = models.efficientnet_b0(weights=None)
+        
+        # 분류기 레이어 수정
+        model.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(p=0.2, inplace=True),
+            torch.nn.Linear(model.classifier[1].in_features, num_classes)
+        )
+        
+        return model
+    except Exception as e:
+        logger.error(f"모델 아키텍처 생성 오류: {str(e)}")
+        return None
 
 def load_model():
     """PyTorch 모델 로드"""
@@ -34,8 +51,17 @@ def load_model():
         model_path = 'models/20251006_212412_best_efficientnet.pth'
         
         if os.path.exists(model_path):
-            model = torch.load(model_path, map_location=device)
+            # 모델 아키텍처 생성
+            model = create_efficientnet_model(num_classes=8)
+            if model is None:
+                return
+            
+            # state_dict 로드
+            state_dict = torch.load(model_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model = model.to(device)
             model.eval()
+            
             logger.info(f"모델이 성공적으로 로드되었습니다: {model_path}")
         else:
             logger.warning(f"모델 파일을 찾을 수 없습니다: {model_path}")
@@ -89,10 +115,13 @@ def predict_diagnosis(image_tensor):
             # 클래스 라벨 매핑 (실제 프로젝트에 맞게 수정 필요)
             class_labels = {
                 0: '정상',
-                1: '피부염',
-                2: '습진',
-                3: '건선',
-                4: '기타'
+                1: '여드름',
+                2: '양성종양',
+                3: '수포성질환',
+                4: '습진',
+                5: '루푸스',
+                6: '피부암',
+                7: '백반증'
             }
             
             predicted_class = predicted.item()
@@ -190,12 +219,19 @@ def server_error(e):
     return jsonify({'error': '서버 내부 오류가 발생했습니다.'}), 500
 
 if __name__ == '__main__':
+    # 설정 적용
+    Config.init_app(app)
+    logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
+    
     # 모델 디렉토리 생성
     os.makedirs('models', exist_ok=True)
     
-    # 모델 로드
+    # 모델 로드 (실패해도 서버는 계속 시작)
     load_model()
     
     # 서버 시작
     logger.info("질병진단 AI 서버를 시작합니다...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    logger.info(f"모델 로드 상태: {'성공' if model is not None else '실패 (모델 없이 실행)'}")
+    
+    # 네트워크 드라이브 문제 해결을 위해 디버그 모드 강제 비활성화
+    app.run(host=Config.HOST, port=Config.PORT, debug=False)

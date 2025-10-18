@@ -1,8 +1,17 @@
 flask==2.3.3
-torch==2.0.1
-torchvision==0.15.2
-Pillow==10.0.1
-numpy==1.24.3
-opencv-python==4.8.1.78
-python-dotenv==1.0.0
 Werkzeug==2.3.7
+
+# PyTorch stack (torch/torchvision must be kept in compatible pairs)
+torch==2.8.0
+torchvision==0.23.0
+
+# Imaging & numerical deps (adjusted for Python 3.13; NumPy 2.x required; OpenCV must be 4.10+)
+pillow>=9.5,<11
+numpy>=2.0,<3
+opencv-python>=4.10.0.84,<5
+
+# Env config
+python-dotenv==1.0.0
+
+# Test client
+requests>=2.31,<3
