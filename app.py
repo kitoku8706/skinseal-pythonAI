@@ -48,7 +48,7 @@ def load_model():
     global model, device
     try:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model_path = 'models/20251006_212412_best_efficientnet.pth'
+        model_path = 'models/best_efficientnet.pth'
         
         if os.path.exists(model_path):
             # 모델 아키텍처 생성
