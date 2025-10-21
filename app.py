@@ -48,23 +48,27 @@ def load_model():
     global model, device
     try:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model_path = 'models/best_efficientnet.pth'
-        
+        model_path = os.path.join('models', 'best_efficientnet.pth')
+
         if os.path.exists(model_path):
+            logger.info(f"모델 파일 경로: {os.path.abspath(model_path)}")
             # 모델 아키텍처 생성
             model = create_efficientnet_model(num_classes=8)
             if model is None:
+                logger.error("모델 아키텍처 생성 실패")
                 return
-            
+
             # state_dict 로드
-            state_dict = torch.load(model_path, map_location=device)
-            model.load_state_dict(state_dict)
-            model = model.to(device)
-            model.eval()
-            
-            logger.info(f"모델이 성공적으로 로드되었습니다: {model_path}")
+            try:
+                state_dict = torch.load(model_path, map_location=device)
+                model.load_state_dict(state_dict)
+                model = model.to(device)
+                model.eval()
+                logger.info("모델이 성공적으로 로드되었습니다.")
+            except Exception as e:
+                logger.error(f"state_dict 로드 중 오류 발생: {str(e)}")
         else:
-            logger.warning(f"모델 파일을 찾을 수 없습니다: {model_path}")
+            logger.warning(f"모델 파일을 찾을 수 없습니다: {os.path.abspath(model_path)}")
             model = None
     except Exception as e:
         logger.error(f"모델 로드 중 오류 발생: {str(e)}")
