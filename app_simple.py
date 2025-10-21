@@ -56,6 +56,11 @@ def diagnose_simple():
             'error': f'처리 중 오류 발생: {str(e)}'
         }), 500
 
+@app.route('/efficientnet', methods=['POST'])
+def diagnose_efficientnet():
+    """백엔드 호환 엔드포인트 (/efficientnet) - diagnose_simple과 동일 처리"""
+    return diagnose_simple()
+
 @app.route('/model/info', methods=['GET'])
 def model_info_simple():
     """모델 정보 (간단 버전)"""
