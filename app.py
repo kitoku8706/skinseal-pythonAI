@@ -21,6 +21,15 @@ app = Flask(__name__)
 model = None
 device = None
 
+# 클래스 이름 리스트 (훈련 데이터 디렉토리 순서에 맞춰야 함)
+CLASS_NAMES = [
+    'Acne', 'Actinic_Keratosis', 'Benign_tumors', 'Bullous', 'Candidiasis', 
+    'DrugEruption', 'Eczema', 'Infestations_Bites', 'Lichen', 'Lupus', 
+    'Moles', 'Psoriasis', 'Rosacea', 'Seborrh_Keratoses', 'SkinCancer', 
+    'Sun_Sunlight_Damage', 'Tinea', 'Unknown_Normal', 'Vascular_Tumors', 
+    'Vasculitis', 'Vitiligo', 'Warts'
+]
+
 def allowed_file(filename):
     """파일 확장자 검증"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
@@ -28,14 +37,16 @@ def allowed_file(filename):
 def create_efficientnet_model(num_classes=22):
     """EfficientNet 모델 아키텍처 생성"""
     try:
-        # torchvision의 EfficientNet 사용
+        # torchvision의 EfficientNet 사용 (사전 학습된 가중치는 사용 안 함)
         import torchvision.models as models
         model = models.efficientnet_b0(weights=None)
         
-        # 분류기 레이어 수정
+        # 모델의 분류기 부분을 프로젝트에 맞게 수정
+        # EfficientNet-B0의 분류기는 1280개의 입력 피처를 가짐
+        num_ftrs = model.classifier[1].in_features
         model.classifier = torch.nn.Sequential(
             torch.nn.Dropout(p=0.2, inplace=True),
-            torch.nn.Linear(model.classifier[1].in_features, num_classes)
+            torch.nn.Linear(num_ftrs, num_classes)
         )
         
         return model
@@ -52,26 +63,29 @@ def load_model():
 
         if os.path.exists(model_path):
             logger.info(f"모델 파일 경로: {os.path.abspath(model_path)}")
-            # 모델 아키텍처 생성
-            model = create_efficientnet_model(num_classes=8)
+            
+            # 1. 모델 아키텍처부터 생성
+            model = create_efficientnet_model(num_classes=22)
             if model is None:
                 logger.error("모델 아키텍처 생성 실패")
                 return
 
-            # state_dict 로드
+            # 2. 저장된 가중치(state_dict)를 모델에 로드
             try:
                 state_dict = torch.load(model_path, map_location=device)
                 model.load_state_dict(state_dict)
                 model = model.to(device)
-                model.eval()
+                model.eval() # 추론 모드로 설정
                 logger.info("모델이 성공적으로 로드되었습니다.")
             except Exception as e:
-                logger.error(f"state_dict 로드 중 오류 발생: {str(e)}")
+                logger.error(f"저장된 가중치(state_dict) 로드 중 오류 발생: {str(e)}")
+                # 오류 발생 시 모델을 None으로 설정하여 예측 시도를 막음
+                model = None
         else:
             logger.warning(f"모델 파일을 찾을 수 없습니다: {os.path.abspath(model_path)}")
             model = None
     except Exception as e:
-        logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+        logger.error(f"모델 로드 과정에서 예기치 않은 오류 발생: {str(e)}")
         model = None
 
 def preprocess_image(image_file):
@@ -99,49 +113,6 @@ def preprocess_image(image_file):
     except Exception as e:
         logger.error(f"이미지 전처리 중 오류: {str(e)}")
         return None
-
-def predict_diagnosis(image_tensor):
-    """모델을 사용한 질병 진단"""
-    global model, device
-    
-    if model is None:
-        return {'diagnosis': '모델을 사용할 수 없음', 'confidence': 0.0}
-    
-    try:
-        with torch.no_grad():
-            image_tensor = image_tensor.to(device)
-            outputs = model(image_tensor)
-            
-            # 소프트맥스를 적용하여 확률 계산
-            probabilities = torch.softmax(outputs, dim=1)
-            confidence, predicted = torch.max(probabilities, 1)
-            
-            # 클래스 라벨 매핑 (실제 프로젝트에 맞게 수정 필요)
-            class_labels = {
-                0: '정상',
-                1: '여드름',
-                2: '양성종양',
-                3: '수포성질환',
-                4: '습진',
-                5: '루푸스',
-                6: '피부암',
-                7: '백반증'
-            }
-            
-            predicted_class = predicted.item()
-            confidence_score = confidence.item()
-            
-            diagnosis = class_labels.get(predicted_class, '알 수 없음')
-            
-            return {
-                'diagnosis': diagnosis,
-                'confidence': round(confidence_score, 3),
-                'class_id': predicted_class
-            }
-            
-    except Exception as e:
-        logger.error(f"예측 중 오류 발생: {str(e)}")
-        return {'diagnosis': '예측 실패', 'confidence': 0.0}
 
 @app.route('/', methods=['GET'])
 def health_check():
@@ -176,23 +147,24 @@ def diagnose():
             return jsonify({'error': '이미지 처리 중 오류가 발생했습니다.'}), 400
         
         # 모델 예측
-        result = predict_diagnosis(image_tensor)
-        
+        with torch.no_grad():
+            outputs = model(image_tensor)
+            _, predicted = torch.max(outputs, 1)
+            prediction_idx = predicted.item()
+
+        # 예측된 인덱스를 클래스 이름으로 변환
+        if 0 <= prediction_idx < len(CLASS_NAMES):
+            predicted_class_name = CLASS_NAMES[prediction_idx]
+        else:
+            predicted_class_name = "Unknown"
+            logger.warning(f"예측된 인덱스 {prediction_idx}가 클래스 이름 범위 밖에 있습니다.")
+
         # 결과 반환
-        response = {
-            'success': True,
-            'filename': secure_filename(file.filename),
-            'diagnosis': result['diagnosis'],
-            'confidence': result['confidence']
-        }
-        
-        if 'class_id' in result:
-            response['class_id'] = result['class_id']
-        
-        return jsonify(response)
-        
+        logger.info(f"진단 결과: {predicted_class_name}")
+        return jsonify({'diagnosis': predicted_class_name})
+
     except Exception as e:
-        logger.error(f"진단 처리 중 오류: {str(e)}")
+        logger.error(f"진단 중 오류 발생: {str(e)}")
         return jsonify({
             'success': False,
             'error': '서버 내부 오류가 발생했습니다.'
