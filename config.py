@@ -26,7 +26,9 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
     
     # 모델 설정
-    MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet.pth')
+    # 22클래스 EfficientNet과 8클래스 모델이 공존 시 파일명을 구분하세요.
+    # 예) best_efficientnet_22cls.pth, best_efficientnet_8cls.pth
+    MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet_22cls.pth')
     MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/best_skin_model.pth')
     MODEL_DEVICE = os.environ.get('MODEL_DEVICE', 'auto')  # auto, cpu, cuda
     
@@ -40,7 +42,7 @@ class Config:
     IMAGE_SIZE = (224, 224)  # 모델 입력 이미지 크기 (학습 시 입력 크기와 일치시켜야 함)
     
     # 모델별 클래스 수
-    NUM_CLASSES_EFFICIENTNET = 8
+    NUM_CLASSES_EFFICIENTNET = 22
     NUM_CLASSES_SKIN_MODEL = 22
     
     # Spring Boot Backend API
