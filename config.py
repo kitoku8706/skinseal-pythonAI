@@ -26,7 +26,8 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
     
     # 모델 설정
-    MODEL_PATH = os.environ.get('MODEL_PATH', 'models/20251006_212412_best_efficientnet.pth')
+    MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/20251006_212412_best_efficientnet.pth')
+    MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/20251006_202955_best_skin_model.pth')
     MODEL_DEVICE = os.environ.get('MODEL_DEVICE', 'auto')  # auto, cpu, cuda
     
     # 허용된 파일 확장자
@@ -38,6 +39,10 @@ class Config:
     # 이미지 처리 설정
     IMAGE_SIZE = (224, 224)  # 모델 입력 이미지 크기
     
+    # 모델별 클래스 수
+    NUM_CLASSES_EFFICIENTNET = 8
+    NUM_CLASSES_SKIN_MODEL = 22
+    
     @classmethod
     def init_app(cls, app):
         """Flask 앱 초기화"""
@@ -45,4 +50,5 @@ class Config:
         
         # 업로드 폴더 생성
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
-        os.makedirs(os.path.dirname(cls.MODEL_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(cls.MODEL_PATH_EFFICIENTNET), exist_ok=True)
+        os.makedirs(os.path.dirname(cls.MODEL_PATH_SKIN_MODEL), exist_ok=True)
