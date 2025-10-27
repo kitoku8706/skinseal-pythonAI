@@ -1,29 +1,15 @@
 {
   "model_name": "efficientnet_b0",
-  "num_classes": 22,
+  "num_classes": 8,
   "image_size": 224,
   "class_names": [
     "Acne",
-    "Actinic Keratosis",
-    "Benign tumors",
+    "Benign_tumors",
     "Bullous",
-    "Candidiasis",
-    "DrugEruption",
     "Eczema",
-    "Infestations Bites",
-    "Lichen",
     "Lupus",
-    "Moles",
-    "Psoriasis",
-    "Rosacea",
-    "Seborrh Keratoses",
     "SkinCancer",
-    "Sun Sunlight Damage",
-    "Tinea",
-    "Unknown Normal",
-    "Vascular Tumors",
-    "Vasculitis",
-    "Vitiligo",
-    "Warts"
+    "Unknown_Normal",
+    "Vitiligo"
   ]
 }

@@ -13,6 +13,11 @@ from config import Config
 from torchvision import transforms as T
 import json
 from acne_inference import AcneInference
+import base64
+try:
+    import cv2
+except Exception:
+    cv2 = None
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -181,6 +186,35 @@ def _infer_num_classes_from_ckpt(ckpt_path: str) -> int | None:
         logger.error(f"클래스 수 추정 중 오류: {e}")
         return None
 
+def _model_config_info():
+    """현재 모델 설정 경로와 파일 상태, 체크포인트로부터 추정한 클래스 수를 반환"""
+    infos = {}
+    cfgs = {
+        'efficientnet': getattr(Config, 'MODEL_PATH_EFFICIENTNET', None),
+        'skin_model': getattr(Config, 'MODEL_PATH_SKIN_MODEL', None),
+    }
+    for name, path in cfgs.items():
+        info = {'path': path, 'exists': False, 'inferred_classes': None}
+        if path and os.path.exists(path):
+            info['exists'] = True
+            try:
+                inferred = _infer_num_classes_from_ckpt(path)
+                info['inferred_classes'] = inferred
+            except Exception:
+                info['inferred_classes'] = None
+        # legacy check for efficientnet
+        if name == 'efficientnet' and not info['exists']:
+            legacy = os.path.join(os.path.dirname(path) or '.', 'best_efficientnet.pth')
+            if os.path.exists(legacy):
+                info['legacy_found'] = True
+                info['legacy_path'] = legacy
+                try:
+                    info['legacy_inferred'] = _infer_num_classes_from_ckpt(legacy)
+                except Exception:
+                    info['legacy_inferred'] = None
+        infos[name] = info
+    return infos
+
 def load_models():
     """PyTorch 모델들을 로드하여 딕셔너리에 저장"""
     global models, device
@@ -228,6 +262,15 @@ def load_models():
                 try:
                     ckpt = torch.load(model_path, map_location=device)
                     state_dict = ckpt.get('state_dict') or ckpt.get('model_state_dict') or ckpt if isinstance(ckpt, dict) else ckpt
+                    # state_dict 키 요약 로깅(상위 candidate 키와 몇 개 샘플)
+                    try:
+                        keys = list(state_dict.keys())[:30]
+                        logger.info(f"state_dict keys(sample 30): {keys}")
+                        # 분류기 관련 candidate 출력
+                        candidate_keys = [k for k in state_dict.keys() if any(x in k.lower() for x in ['classifier','fc.weight','fc.weight','fc_bias','head'])]
+                        logger.info(f"candidate classifier keys: {candidate_keys}")
+                    except Exception:
+                        pass
                     cleaned_state = {}
                     for k, v in state_dict.items():
                         nk = k
@@ -240,8 +283,10 @@ def load_models():
                     missing, unexpected = model.load_state_dict(cleaned_state, strict=False)
                     if missing:
                         logger.warning(f"'{name}' 로드 경고 - missing keys: {len(missing)}")
+                        logger.debug(f"missing keys sample: {missing[:10]}")
                     if unexpected:
                         logger.warning(f"'{name}' 로드 경고 - unexpected keys: {len(unexpected)}")
+                        logger.debug(f"unexpected keys sample: {unexpected[:10]}")
 
                     model = model.to(device)
                     model.eval()
@@ -263,6 +308,13 @@ def load_models():
                 logger.warning(f"'{name}' 모델 파일을 찾을 수 없습니다: {model_path}")
 
         logger.info(f"로드 완료 모델: {list(models.keys())}")
+
+        # 추가: 설정 파일과 체크포인트 상태 요약 로깅
+        try:
+            cfg_info = _model_config_info()
+            logger.info(f"Model config info: {json.dumps(cfg_info, ensure_ascii=False, indent=2)}")
+        except Exception:
+            pass
 
     except Exception as e:
         logger.error(f"모델 로드 중 오류 발생: {str(e)}")
@@ -294,6 +346,33 @@ def preprocess_image(image_file):
         logger.error(f"이미지 전처리 중 오류: {str(e)}")
         return None
 
+# 유틸: Spring Boot로 결과 전송 및 상세 로깅
+def send_to_spring(diagnosis_data: dict, timeout: float = 5.0):
+    """진단 결과를 Spring Boot로 전송하고 요청/응답을 상세 로깅합니다."""
+    try:
+        # 사람이 읽기 좋은 JSON으로 로그
+        pretty = json.dumps(diagnosis_data, ensure_ascii=False, indent=2)
+        logger.info(f"Sending diagnosis to Spring Boot (payload):\n{pretty}")
+
+        resp = requests.post(app.config['SPRING_BOOT_API_URL'], json=diagnosis_data, timeout=timeout)
+        try:
+            resp_json = resp.json()
+        except Exception:
+            resp_json = None
+
+        logger.info(f"Spring Boot response status: {resp.status_code}")
+        if resp_json is not None:
+            logger.info(f"Spring Boot response body: {json.dumps(resp_json, ensure_ascii=False, indent=2)}")
+        else:
+            logger.info(f"Spring Boot response text: {resp.text}")
+
+        resp.raise_for_status()
+        return resp
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to send diagnosis to Spring Boot: {e}")
+        # 네트워크/응답 실패 시에도 호출자에게 예외를 전파하지 않음(비동기 로깅 목적)
+        return None
+
 @app.route('/health', methods=['GET'])
 @app.route('/api/health', methods=['GET'])
 def health_ok():
@@ -317,8 +396,18 @@ def health_check():
 @app.route('/api/diagnosis/<model_name>', methods=['POST'])
 def diagnosis(model_name):
     """AI 진단 API"""
+    # 진단 요청 들어올 때 요청된 모델 및 현재 로드된 모델들 로깅
+    logger.info(f"Diagnosis request received. requested_model={model_name}, loaded_models={list(models.keys())}")
+
     if model_name not in models:
-        return jsonify({'error': f"'{model_name}' 모델을 찾을 수 없습니다."}), 404
+        # 상세 진단 정보 준비
+        cfg_info = _model_config_info()
+        logger.error(f"Requested model '{model_name}' not loaded. Available: {list(models.keys())}. Config info: {cfg_info}")
+        return jsonify({
+            'error': f"'{model_name}' 모델을 찾을 수 없습니다.",
+            'availableModels': list(models.keys()),
+            'modelConfigInfo': cfg_info
+        }), 404
 
     # image/file 키 모두 허용
     upload_key = 'image' if 'image' in request.files else ('file' if 'file' in request.files else None)
@@ -394,11 +483,13 @@ def diagnosis(model_name):
 
             # Spring Boot 백엔드 API 호출
             try:
-                response = requests.post(app.config['SPRING_BOOT_API_URL'], json=diagnosis_data, timeout=5)
-                response.raise_for_status()
-                app.logger.info(f"Successfully sent diagnosis to Spring Boot: {response.json()}")
-            except requests.exceptions.RequestException as e:
-                app.logger.error(f"Failed to send diagnosis to Spring Boot: {e}")
+                response = send_to_spring(diagnosis_data, timeout=5)
+                if response is not None:
+                    app.logger.info(f"Successfully sent diagnosis to Spring Boot (history saved)")
+                else:
+                    app.logger.warning("Spring Boot save failed or no response returned")
+            except Exception as e:
+                app.logger.error(f"진단 전송 중 예외 발생: {e}")
 
             return jsonify(results)
 
@@ -446,9 +537,11 @@ def diagnosis_acne():
             'modelName': 'acne'
         }
         try:
-            response = requests.post(app.config['SPRING_BOOT_API_URL'], json=diagnosis_data)
-            response.raise_for_status()
-            app.logger.info(f"Successfully sent acne diagnosis to Spring Boot: {response.json()}")
+            response = send_to_spring(diagnosis_data)
+            if response is not None:
+                app.logger.info(f"Successfully sent acne diagnosis to Spring Boot (history saved)")
+            else:
+                app.logger.warning("Spring Boot save failed or no response returned for acne diagnosis")
         except requests.exceptions.RequestException as e:
             app.logger.error(f"Failed to send acne diagnosis to Spring Boot: {e}")
 
@@ -456,6 +549,194 @@ def diagnosis_acne():
     except Exception as e:
         logger.error(f"Acne 진단 중 오류: {e}")
         return jsonify({'error': '진단 중 서버 오류가 발생했습니다.'}), 500
+
+def _find_last_conv_module(model):
+    """모델에서 마지막 Conv2d 모듈을 찾아 반환합니다."""
+    last_conv = None
+    for m in model.modules():
+        # torch.nn.modules.conv._ConvNd is base class, but check classname
+        if m.__class__.__name__.lower().startswith('conv'):
+            last_conv = m
+    return last_conv
+
+
+def _encode_image_to_base64(pil_img):
+    buf = io.BytesIO()
+    pil_img.save(buf, format='PNG')
+    b = buf.getvalue()
+    return base64.b64encode(b).decode('ascii')
+
+
+def compute_gradcam(model, input_tensor, original_pil, target_index=None, device=torch.device('cpu')):
+    """Compute Grad-CAM for a single-input tensor and return heatmap and overlay PIL images.
+    input_tensor: torch tensor shape [1,C,H,W] on device
+    original_pil: PIL.Image RGB
+    target_index: class index to compute for. If None uses model argmax.
+    """
+    model.eval()
+    # find target layer
+    target_layer = _find_last_conv_module(model)
+    activations = {}
+    gradients = {}
+
+    if target_layer is None:
+        raise RuntimeError('No conv layer found in model for Grad-CAM')
+
+    def forward_hook(module, inp, outp):
+        activations['value'] = outp.detach()
+
+    def backward_hook(module, grad_in, grad_out):
+        # grad_out is a tuple
+        gradients['value'] = grad_out[0].detach()
+
+    fh = target_layer.register_forward_hook(forward_hook)
+    bh = target_layer.register_full_backward_hook(backward_hook)
+
+    # forward
+    input_tensor = input_tensor.to(device)
+    output = model(input_tensor)
+    if isinstance(output, tuple):
+        logits = output[0]
+    else:
+        logits = output
+    probs = torch.nn.functional.softmax(logits, dim=1)
+    if target_index is None:
+        target_index = int(torch.argmax(probs[0]).item())
+
+    # backward on the target class score
+    model.zero_grad()
+    score = logits[0, target_index]
+    score.backward(retain_graph=False)
+
+    # get saved activations and gradients
+    act = activations.get('value')  # shape [1,C,H,W]
+    grad = gradients.get('value')   # shape [1,C,H,W]
+
+    # remove hooks
+    try:
+        fh.remove()
+        bh.remove()
+    except Exception:
+        pass
+
+    if act is None or grad is None:
+        raise RuntimeError('Failed to obtain activations/gradients for Grad-CAM')
+
+    # compute weights: global average pooling of gradients
+    weights = torch.mean(grad, dim=(2, 3))[0]  # shape [C]
+    # weighted combination
+    cam = torch.zeros(act.shape[2:], dtype=torch.float32, device=act.device)
+    for i, w in enumerate(weights):
+        cam += w * act[0, i, :, :]
+    cam = torch.relu(cam)
+
+    # normalize to [0,1]
+    cam -= cam.min()
+    if cam.max() > 0:
+        cam /= cam.max()
+    cam_np = cam.cpu().numpy()
+
+    # resize to original image size
+    orig_w, orig_h = original_pil.size
+    if cv2 is not None:
+        cam_resized = cv2.resize((cam_np * 255).astype('uint8'), (orig_w, orig_h))
+        heatmap_bgr = cv2.applyColorMap(cam_resized, cv2.COLORMAP_JET)
+        heatmap_rgb = cv2.cvtColor(heatmap_bgr, cv2.COLOR_BGR2RGB)
+        heatmap_pil = Image.fromarray(heatmap_rgb)
+    else:
+        # fallback: PIL resize and grayscale colormap
+        cam_img = Image.fromarray((cam_np * 255).astype('uint8'))
+        heatmap_pil = cam_img.resize((orig_w, orig_h), resample=Image.BILINEAR).convert('RGB')
+
+    # overlay heatmap on original
+    overlay = Image.blend(original_pil.convert('RGB'), heatmap_pil.convert('RGB'), alpha=0.4)
+
+    return heatmap_pil, overlay, probs[0, target_index].item()
+
+
+@app.route('/api/diagnosis/<model_name>/gradcam', methods=['POST'])
+def diagnosis_gradcam(model_name):
+    """진단 + Grad-CAM 생성 엔드포인트
+    요청: multipart form-data
+      - image or file: 이미지 파일
+      - classIndex (optional): int, 타겟 클래스 인덱스(레이블 인덱스)
+    응답: JSON { results: [...], gradcam: { targetIndex, score, heatmap_base64, overlay_base64 } }
+    """
+    if model_name not in models:
+        return jsonify({'error': f"'{model_name}' 모델을 찾을 수 없습니다.", 'availableModels': list(models.keys())}), 404
+
+    upload_key = 'image' if 'image' in request.files else ('file' if 'file' in request.files else None)
+    if not upload_key:
+        return jsonify({'error': '이미지 파일이 없습니다.'}), 400
+    file = request.files[upload_key]
+    if file.filename == '':
+        return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400
+
+    # optional class index
+    class_idx = request.form.get('classIndex')
+    try:
+        class_idx = int(class_idx) if class_idx is not None else None
+    except Exception:
+        class_idx = None
+
+    # read bytes once
+    img_bytes = file.read()
+    pil = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+    # create file-like for preprocess_image
+    tensor = preprocess_image(io.BytesIO(img_bytes))
+    if tensor is None:
+        return jsonify({'error': '이미지 처리 실패'}), 500
+
+    # device selection
+    global device
+    if device is None:
+        device = select_device_from_config()
+
+    # model and inference
+    selected_model = models[model_name]
+    selected_model = selected_model.to(device)
+
+    # forward probs to get top-k results
+    with torch.no_grad():
+        out = selected_model(tensor.to(device))
+        probs = torch.nn.functional.softmax(out, dim=1)[0]
+    topk = torch.topk(probs, k=min(3, probs.shape[0]))
+    labels = CLASS_LABELS.get(model_name, [])
+    results = []
+    for i in range(topk.indices.shape[0]):
+        idx = int(topk.indices[i].item())
+        p = float(topk.values[i].item())
+        name = labels[idx] if idx < len(labels) else str(idx)
+        results.append({'class': name, 'index': idx, 'probability': f"{p:.2%}"})
+
+    # compute gradcam (this does backward so no torch.no_grad)
+    try:
+        heatmap_pil, overlay_pil, score = compute_gradcam(selected_model, tensor, pil, target_index=class_idx, device=device)
+        heatmap_b64 = _encode_image_to_base64(heatmap_pil)
+        overlay_b64 = _encode_image_to_base64(overlay_pil)
+    except Exception as e:
+        logger.error(f"Grad-CAM 생성 중 오류: {e}")
+        return jsonify({'results': results, 'gradcam': None, 'warning': str(e)}), 200
+
+    gradcam_payload = {
+        'targetIndex': class_idx if class_idx is not None else int(torch.argmax(probs).item()),
+        'score': float(score),
+        'heatmap_base64': heatmap_b64,
+        'overlay_base64': overlay_b64
+    }
+
+    # also send to Spring Boot for record (same as diagnosis)
+    diagnosis_data = {
+        'userId': request.form.get('userId'),
+        'result': results,
+        'modelName': model_name
+    }
+    try:
+        send_to_spring(diagnosis_data)
+    except Exception:
+        pass
+
+    return jsonify({'results': results, 'gradcam': gradcam_payload})
 
 @app.errorhandler(413)
 def too_large(e):

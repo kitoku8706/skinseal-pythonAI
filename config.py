@@ -26,10 +26,14 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
     
     # 모델 설정
-    # 22클래스 EfficientNet과 8클래스 모델이 공존 시 파일명을 구분하세요.
-    # 예) best_efficientnet_22cls.pth, best_efficientnet_8cls.pth
-    MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet_22cls.pth')
-    MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/best_skin_model.pth')
+    # 현재 저장소의 모델 파일명 예시:
+    # - 22클래스: models/best_efficientnet22.pth
+    # - 8클래스(예시): models/best_efficientnet_8cls.pth
+    # 필요시 환경변수로 덮어쓰세요.
+    # 모델 설정: 실제 존재하는 파일로 기본값을 맞춥니다.
+    # 기존에 혼선이 있었으므로 기본값을 명시적으로 models/best_efficientnet.pth 로 설정합니다.
+    MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet.pth')
+    MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/skin_model.pth')
     MODEL_DEVICE = os.environ.get('MODEL_DEVICE', 'auto')  # auto, cpu, cuda
     
     # 허용된 파일 확장자
