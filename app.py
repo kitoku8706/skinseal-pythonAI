@@ -52,6 +52,9 @@ CLASS_LABELS = {
         'Moles', 'Psoriasis', 'Rosacea', 'Seborrh Keratoses', 'SkinCancer',
         'Sun Sunlight Damage', 'Tinea', 'Unknown Normal', 'Vascular Tumors',
         'Vasculitis', 'Vitiligo', 'Warts'
+    ],
+    "acne_model": [
+        'Non-Acne', 'Acne'
     ]
 }
 
@@ -92,6 +95,10 @@ def load_models():
             "skin_model": {
                 "path": Config.MODEL_PATH_SKIN_MODEL,
                 "num_classes": Config.NUM_CLASSES_SKIN_MODEL
+            },
+            "acne_model": {
+                "path": Config.MODEL_PATH_ACNE,
+                "num_classes": Config.NUM_CLASSES_ACNE
             }
         }
 
@@ -259,8 +266,9 @@ def diagnosis(model_name):
                 probabilities = probs_sum / len(views)
                 probabilities = probabilities[0]
             
-            # 상위 3개 예측 결과 추출
-            top_k = 3
+            # 상위 K개 예측 결과 추출 (클래스 수보다 크지 않게 제한)
+            num_classes = probabilities.shape[0]
+            top_k = min(3, num_classes)
             top_probs, top_indices = torch.topk(probabilities, top_k)
             
             # 클래스 레이블 가져오기
@@ -310,6 +318,12 @@ def not_found(e):
 def server_error(e):
     """500 오류 처리"""
     return jsonify({'error': '서버 내부 오류가 발생했습니다.'}), 500
+
+# 별도 별칭(엔드포인트) 제공: Acne 전용 이진 모델
+@app.route('/api/predict-acne', methods=['POST'])
+def predict_acne_alias():
+    # 내부적으로 공용 핸들러 재사용
+    return diagnosis('acne_model')
 
 if __name__ == '__main__':
     # 설정 적용

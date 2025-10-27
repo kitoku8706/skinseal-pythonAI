@@ -28,6 +28,7 @@ class Config:
     # 모델 설정
     MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet.pth')
     MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/best_skin_model.pth')
+    MODEL_PATH_ACNE = os.environ.get('MODEL_PATH_ACNE', 'models/best_acne_model.pth')
     MODEL_DEVICE = os.environ.get('MODEL_DEVICE', 'auto')  # auto, cpu, cuda
     
     # 허용된 파일 확장자
@@ -42,6 +43,7 @@ class Config:
     # 모델별 클래스 수
     NUM_CLASSES_EFFICIENTNET = 8
     NUM_CLASSES_SKIN_MODEL = 22
+    NUM_CLASSES_ACNE = 2
     
     # Spring Boot Backend API
     SPRING_BOOT_API_URL = "http://localhost:8090/api/diagnosis"
@@ -61,3 +63,4 @@ class Config:
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
         os.makedirs(os.path.dirname(cls.MODEL_PATH_EFFICIENTNET), exist_ok=True)
         os.makedirs(os.path.dirname(cls.MODEL_PATH_SKIN_MODEL), exist_ok=True)
+        os.makedirs(os.path.dirname(cls.MODEL_PATH_ACNE), exist_ok=True)
