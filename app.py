@@ -423,16 +423,28 @@ def diagnosis(model_name):
 
     file = request.files[upload_key]
     if file.filename == '':
-        return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400
-
-    # 추가: userId 받기
+        return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400    # 추가: userId 받기
     user_id = request.form.get('userId')
     if not user_id:
         return jsonify({'error': 'User ID is required'}), 400
 
     if file and allowed_file(file.filename):
         try:
+            # GradCAM 옵션 확인
+            enable_gradcam = request.form.get('gradcam', 'false').lower() in ['true', '1', 'yes']
+            class_idx = request.form.get('classIndex')
+            try:
+                class_idx = int(class_idx) if class_idx is not None else None
+            except Exception:
+                class_idx = None
+            
+            # 원본 이미지 저장 (GradCAM 용도)
+            file.seek(0)  # 파일 포인터를 처음으로 되돌림
+            img_bytes = file.read()
+            pil_image = Image.open(io.BytesIO(img_bytes)).convert('RGB') if enable_gradcam else None
+            
             # 이미지 전처리
+            file.seek(0)  # 다시 처음으로 되돌림
             image_tensor = preprocess_image(file)
             if image_tensor is None:
                 return jsonify({'error': '이미지 처리 중 오류가 발생했습니다.'}), 500
@@ -480,7 +492,26 @@ def diagnosis(model_name):
                 prob = top_probs[i].item()
                 class_index = top_indices[i].item()
                 class_name = labels[class_index] if class_index < len(labels) else "알 수 없음"
-                results.append({'class': class_name, 'probability': f"{prob:.2%}"})
+                results.append({'class': class_name, 'probability': f"{prob:.2%}"})            # GradCAM 계산 (옵션)
+            gradcam_result = None
+            if enable_gradcam and pil_image is not None:
+                try:
+                    heatmap_pil, overlay_pil, score = compute_gradcam(selected_model, image_tensor, pil_image, target_index=class_idx, device=device)
+                    # 원본 이미지, 히트맵, 오버레이 이미지 모두 base64로 인코딩
+                    original_b64 = _encode_image_to_base64(pil_image)
+                    heatmap_b64 = _encode_image_to_base64(heatmap_pil)
+                    overlay_b64 = _encode_image_to_base64(overlay_pil)
+                    
+                    gradcam_result = {
+                        'targetIndex': class_idx if class_idx is not None else int(torch.argmax(probabilities).item()),
+                        'score': float(score),
+                        'original_base64': original_b64,
+                        'heatmap_base64': heatmap_b64,
+                        'overlay_base64': overlay_b64
+                    }
+                except Exception as e:
+                    logger.error(f"Grad-CAM 생성 중 오류: {e}")
+                    gradcam_result = {'error': str(e)}
 
             # Spring Boot 백엔드로 보낼 데이터 준비
             diagnosis_data = {
@@ -499,7 +530,12 @@ def diagnosis(model_name):
             except Exception as e:
                 app.logger.error(f"진단 전송 중 예외 발생: {e}")
 
-            return jsonify(results)
+            # 결과 반환 (GradCAM 포함)
+            response_data = {'results': results}
+            if gradcam_result:
+                response_data['gradcam'] = gradcam_result
+                
+            return jsonify(response_data)
 
         except Exception as e:
             logger.error(f"진단 중 오류 발생: {str(e)}")
@@ -715,20 +751,47 @@ def diagnosis_gradcam(model_name):
         idx = int(topk.indices[i].item())
         p = float(topk.values[i].item())
         name = labels[idx] if idx < len(labels) else str(idx)
-        results.append({'class': name, 'index': idx, 'probability': f"{p:.2%}"})
-
-    # compute gradcam (this does backward so no torch.no_grad)
+        results.append({'class': name, 'index': idx, 'probability': f"{p:.2%}"})    # compute gradcam (this does backward so no torch.no_grad)
+    # 변수 초기화
+    original_b64 = heatmap_b64 = overlay_b64 = ""
+    score = 0.0
+    
     try:
+        logger.info(f"GradCAM 시작 - target_index: {class_idx}")
         heatmap_pil, overlay_pil, score = compute_gradcam(selected_model, tensor, pil, target_index=class_idx, device=device)
-        heatmap_b64 = _encode_image_to_base64(heatmap_pil)
-        overlay_b64 = _encode_image_to_base64(overlay_pil)
+        logger.info("GradCAM 계산 완료, 이미지 인코딩 시작")
+        
+        # 원본 이미지 인코딩
+        try:
+            original_b64 = _encode_image_to_base64(pil)
+            logger.info(f"원본 이미지 인코딩 완료 - 길이: {len(original_b64)}")
+        except Exception as e:
+            logger.error(f"원본 이미지 인코딩 오류: {e}")
+            
+        # 히트맵 이미지 인코딩  
+        try:
+            heatmap_b64 = _encode_image_to_base64(heatmap_pil)
+            logger.info(f"히트맵 이미지 인코딩 완료 - 길이: {len(heatmap_b64)}")
+        except Exception as e:
+            logger.error(f"히트맵 이미지 인코딩 오류: {e}")
+            
+        # 오버레이 이미지 인코딩
+        try:
+            overlay_b64 = _encode_image_to_base64(overlay_pil)
+            logger.info(f"오버레이 이미지 인코딩 완료 - 길이: {len(overlay_b64)}")
+        except Exception as e:
+            logger.error(f"오버레이 이미지 인코딩 오류: {e}")
+            
     except Exception as e:
-        logger.error(f"Grad-CAM 생성 중 오류: {e}")
+        logger.error(f"Grad-CAM 계산 중 오류: {e}")
+        import traceback
+        logger.error(f"상세 오류: {traceback.format_exc()}")
         return jsonify({'results': results, 'gradcam': None, 'warning': str(e)}), 200
 
     gradcam_payload = {
         'targetIndex': class_idx if class_idx is not None else int(torch.argmax(probs).item()),
         'score': float(score),
+        'original_base64': original_b64,
         'heatmap_base64': heatmap_b64,
         'overlay_base64': overlay_b64
     }

@@ -6,6 +6,10 @@
 
 - **이미지 업로드**: 다양한 이미지 형식 지원 (PNG, JPG, JPEG, GIF, BMP)
 - **AI 진단**: PyTorch 모델을 사용한 자동 질병 진단
+- **GradCAM 시각화**: 
+  - 원본 이미지, 히트맵, 오버레이 이미지 제공
+  - AI 판단 근거의 시각적 설명
+  - Base64 인코딩으로 웹 친화적 전송
 - **REST API**: JSON 형태의 응답을 제공하는 RESTful API
 - **실시간 처리**: 이미지 업로드 즉시 진단 결과 제공
 - **오류 처리**: 포괄적인 예외 처리 및 사용자 친화적 오류 메시지
@@ -19,6 +23,7 @@ skinseal-pythonAI/
 ├── config.py              # 설정 관리
 ├── utils.py               # 유틸리티 함수들
 ├── test_client.py         # API 테스트 클라이언트
+├── test_gradcam_visual.py # GradCAM 시각화 테스트 클라이언트
 ├── requirements.txt       # Python 의존성 패키지
 ├── .env.example           # 환경 변수 예시 파일
 ├── .gitignore            # Git 제외 파일 목록
@@ -102,15 +107,107 @@ Content-Type: multipart/form-data
 **응답 예시:**
 ```json
 {
-  "success": true,
-  "filename": "skin_sample.jpg",
-  "diagnosis": "정상",
-  "confidence": 0.952,
-  "class_id": 0
+  "results": [
+    {
+      "class": "정상",
+      "probability": "95.20%"
+    },
+    {
+      "class": "피부염",
+      "probability": "3.15%"
+    }
+  ]
 }
 ```
 
-### 3. 모델 정보 조회
+### 3. GradCAM과 함께 진단 (시각화 포함)
+
+```http
+POST /api/diagnosis/{model_name}
+```
+
+**요청 파라미터:**
+- `file`: 진단할 이미지 파일
+- `userId`: 사용자 ID
+- `gradcam`: "true"로 설정하면 GradCAM 결과 포함
+- `classIndex`: (선택사항) 특정 클래스에 대한 GradCAM 생성
+
+**응답 예시:**
+```json
+{
+  "results": [
+    {
+      "class": "피부염",
+      "probability": "87.30%"
+    }
+  ],
+  "gradcam": {
+    "targetIndex": 1,
+    "score": 0.8730,
+    "original_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "heatmap_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "overlay_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+  }
+}
+```
+
+### 4. 전용 GradCAM API
+
+```http
+POST /api/diagnosis/{model_name}/gradcam
+```
+
+**요청 파라미터:**
+- `file`: 진단할 이미지 파일
+- `userId`: 사용자 ID
+- `classIndex`: (선택사항) 특정 클래스에 대한 GradCAM 생성
+
+**응답**: 위와 동일한 형식으로 항상 GradCAM 결과 포함
+
+## 📊 GradCAM 시각화 이해하기
+
+GradCAM(Gradient-weighted Class Activation Mapping)은 AI 모델이 이미지의 어느 부분을 보고 판단을 내렸는지 시각적으로 보여주는 기술입니다.
+
+### 응답 이미지 설명
+
+1. **original_base64**: 업로드한 원본 이미지
+   - 분석 대상이 된 원래 이미지
+   
+2. **heatmap_base64**: 열화상 맵 (히트맵)
+   - 빨간색 영역: AI가 중요하게 본 부분 (높은 관심도)
+   - 파란색 영역: AI가 덜 중요하게 본 부분 (낮은 관심도)
+   
+3. **overlay_base64**: 오버레이 이미지
+   - 원본 이미지 위에 히트맵을 투명하게 겹친 결과
+   - 실제 병변 위치와 AI 판단 영역 비교 가능
+
+### 클라이언트 구현 예제
+
+```python
+import requests
+import base64
+from PIL import Image
+from io import BytesIO
+
+# GradCAM API 호출
+response = requests.post('http://localhost:5000/api/diagnosis/efficientnet/gradcam', 
+                        files={'file': ('image.jpg', open('image.jpg', 'rb'))},
+                        data={'userId': 'user123'})
+
+if response.status_code == 200:
+    result = response.json()
+    gradcam = result['gradcam']
+    
+    # Base64 이미지를 파일로 저장
+    for img_type in ['original', 'heatmap', 'overlay']:
+        b64_data = gradcam[f'{img_type}_base64']
+        img_data = base64.b64decode(b64_data)
+        
+        with open(f'{img_type}.png', 'wb') as f:
+            f.write(img_data)
+```
+
+### 5. 모델 정보 조회
 
 ```http
 GET /model/info
@@ -127,10 +224,24 @@ GET /model/info
 
 ## 🧪 테스트
 
-테스트 클라이언트를 사용하여 API를 테스트할 수 있습니다:
-
+### 기본 API 테스트
 ```bash
 python test_client.py
+```
+
+### GradCAM 시각화 테스트
+```bash
+python test_gradcam_visual.py
+```
+
+이 테스트는 다음과 같은 결과를 생성합니다:
+- `gradcam_results/diagnosis_original.png`: 원본 이미지
+- `gradcam_results/diagnosis_heatmap.png`: GradCAM 히트맵
+- `gradcam_results/diagnosis_overlay.png`: 원본 + 히트맵 오버레이
+
+### Acne 전용 모델 테스트
+```bash
+python test_acne_client.py
 ```
 
 ## 🔧 설정 옵션
