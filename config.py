@@ -26,8 +26,16 @@ class Config:
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
     
     # 모델 설정
+    # 현재 저장소의 모델 파일명 예시:
+    # - 22클래스: models/best_efficientnet22.pth
+    # - 8클래스(예시): models/best_efficientnet_8cls.pth
+    # 필요시 환경변수로 덮어쓰세요.
+    # 모델 설정: 실제 존재하는 파일로 기본값을 맞춥니다.
+    # 기존에 혼선이 있었으므로 기본값을 명시적으로 models/best_efficientnet.pth 로 설정합니다.
     MODEL_PATH_EFFICIENTNET = os.environ.get('MODEL_PATH_EFFICIENTNET', 'models/best_efficientnet.pth')
-    MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/best_skin_model.pth')
+
+    MODEL_PATH_ACNE = os.environ.get('MODEL_PATH_ACNE', 'models/best_acne_model.pth')
+    MODEL_PATH_SKIN_MODEL = os.environ.get('MODEL_PATH_SKIN_MODEL', 'models/skin_model.pth')
     MODEL_DEVICE = os.environ.get('MODEL_DEVICE', 'auto')  # auto, cpu, cuda
     
     # 허용된 파일 확장자
@@ -40,8 +48,9 @@ class Config:
     IMAGE_SIZE = (224, 224)  # 모델 입력 이미지 크기 (학습 시 입력 크기와 일치시켜야 함)
     
     # 모델별 클래스 수
-    NUM_CLASSES_EFFICIENTNET = 8
+    NUM_CLASSES_EFFICIENTNET = 22
     NUM_CLASSES_SKIN_MODEL = 22
+    NUM_CLASSES_ACNE = 2
     
     # Spring Boot Backend API
     SPRING_BOOT_API_URL = "http://localhost:8090/api/diagnosis"
@@ -61,3 +70,4 @@ class Config:
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
         os.makedirs(os.path.dirname(cls.MODEL_PATH_EFFICIENTNET), exist_ok=True)
         os.makedirs(os.path.dirname(cls.MODEL_PATH_SKIN_MODEL), exist_ok=True)
+        os.makedirs(os.path.dirname(cls.MODEL_PATH_ACNE), exist_ok=True)
