@@ -1,0 +1,45 @@
+epoch=1 batch=50/370 loss=0.2903 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=100/370 loss=0.1637 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=150/370 loss=0.4390 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=200/370 loss=0.2433 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=250/370 loss=0.2339 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=300/370 loss=0.2758 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=350/370 loss=0.3023 lr=0.001000 mem_alloc=97.8MB
+epoch=1 batch=370/370 loss=0.0092 lr=0.001000 mem_alloc=83.1MB
+Epoch [1/5] train_loss=0.1876 val_loss=0.1768 val_acc=0.9578 val_f1=0.0000 time=181.7s
+epoch=2 batch=50/370 loss=0.1256 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=100/370 loss=0.1404 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=150/370 loss=0.1292 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=200/370 loss=0.0408 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=250/370 loss=0.1514 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=300/370 loss=0.1394 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=350/370 loss=0.3950 lr=0.001000 mem_alloc=97.8MB
+epoch=2 batch=370/370 loss=0.0071 lr=0.001000 mem_alloc=83.1MB
+Epoch [2/5] train_loss=0.1863 val_loss=0.1884 val_acc=0.9563 val_f1=0.0000 time=113.8s
+epoch=3 batch=50/370 loss=0.1220 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=100/370 loss=0.2456 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=150/370 loss=0.2520 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=200/370 loss=0.0584 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=250/370 loss=0.0653 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=300/370 loss=0.1950 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=350/370 loss=0.2035 lr=0.001000 mem_alloc=97.8MB
+epoch=3 batch=370/370 loss=1.1322 lr=0.001000 mem_alloc=83.1MB
+Epoch [3/5] train_loss=0.1771 val_loss=0.1842 val_acc=0.9578 val_f1=0.0000 time=114.8s
+epoch=4 batch=50/370 loss=0.1150 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=100/370 loss=0.0358 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=150/370 loss=0.2911 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=200/370 loss=0.3453 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=250/370 loss=0.0335 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=300/370 loss=0.0568 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=350/370 loss=0.0323 lr=0.001000 mem_alloc=97.8MB
+epoch=4 batch=370/370 loss=0.0195 lr=0.001000 mem_alloc=83.1MB
+Epoch [4/5] train_loss=0.1746 val_loss=0.1595 val_acc=0.9578 val_f1=0.0000 time=113.8s
+epoch=5 batch=50/370 loss=0.2477 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=100/370 loss=0.3458 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=150/370 loss=0.1636 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=200/370 loss=0.1827 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=250/370 loss=0.2838 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=300/370 loss=0.2440 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=350/370 loss=0.0508 lr=0.001000 mem_alloc=97.8MB
+epoch=5 batch=370/370 loss=0.0194 lr=0.001000 mem_alloc=83.1MB
+Epoch [5/5] train_loss=0.1682 val_loss=0.1560 val_acc=0.9578 val_f1=0.0000 time=113.7s

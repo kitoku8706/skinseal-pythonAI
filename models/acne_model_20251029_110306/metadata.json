@@ -1,0 +1,22 @@
+{
+  "project_root": "d:\\2ckvmfhwpr\\skinseal-model",
+  "train_dir": "d:\\2ckvmfhwpr\\skinseal-model\\train",
+  "out_dir": "d:\\2ckvmfhwpr\\skinseal-pythonAI\\models\\acne_model_20251029_110306",
+  "out_model_file": "d:\\2ckvmfhwpr\\skinseal-pythonAI\\models\\acne_model_20251029_110306\\best_acne_model_20251029_110306.pth",
+  "out_path_copy": "d:\\2ckvmfhwpr\\skinseal-pythonAI\\models\\best_acne_model.pth",
+  "hyperparams": {
+    "IMG_SIZE": [
+      224,
+      224
+    ],
+    "BATCH_SIZE": 32,
+    "EPOCHS": 20,
+    "LR": 0.001,
+    "WEIGHT_DECAY": 0.0001,
+    "NUM_WORKERS": 0,
+    "USE_PRETRAINED": false
+  },
+  "best_epoch": 16,
+  "best_val_f1": 0.024630479067014998,
+  "timestamp": "20251029_110306"
+}
