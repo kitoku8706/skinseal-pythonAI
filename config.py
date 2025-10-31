@@ -52,8 +52,8 @@ class Config:
     NUM_CLASSES_SKIN_MODEL = 22
     NUM_CLASSES_ACNE = 2
     
-    # Spring Boot Backend API
-    SPRING_BOOT_API_URL = "http://localhost:8090/api/diagnosis"
+    # Spring Boot Backend API (default to Backend EC2)
+    SPRING_BOOT_API_URL = os.environ.get('SPRING_BOOT_API_URL', 'http://18.210.20.169:8090/api/diagnosis')
     
     # TTA(Test-Time Augmentation) 옵션
     TTA_ENABLED = os.environ.get('TTA_ENABLED', 'true').lower() == 'true'
