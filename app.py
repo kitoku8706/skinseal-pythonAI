@@ -14,6 +14,7 @@ from torchvision import transforms as T
 import json
 from acne_inference import AcneInference
 import base64
+import traceback
 try:
     import cv2
 except Exception:
@@ -311,6 +312,8 @@ def load_models():
 
                 except Exception as e:
                     logger.error(f"'{name}' 모델 로드 중 예외 발생: {e}")
+                    print(f"FATAL ERROR loading model {name}: {e}")
+                    traceback.print_exc()
             else:
                 logger.warning(f"'{name}' 모델 파일을 찾을 수 없습니다: {model_path}")
 
@@ -325,6 +328,8 @@ def load_models():
 
     except Exception as e:
         logger.error(f"모델 로드 중 오류 발생: {str(e)}")
+        print(f"FATAL ERROR loading model (overall): {e}")
+        traceback.print_exc()
 
 def preprocess_image(image_file):
     """이미지 전처리"""
