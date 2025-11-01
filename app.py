@@ -32,30 +32,6 @@ device = None
 # Acne 전용 추론기 (지연 생성)
 acne_infer = None
 
-# 간단한 단계별 추적 유틸
-class StepTracer:
-    def __init__(self, enabled=False):
-        self.enabled = enabled
-        self.steps = []
-
-    def add(self, step, status='ok', info=None):
-        if not self.enabled:
-            return
-        payload = {'step': step, 'status': status}
-        if info is not None:
-            payload['info'] = info
-        self.steps.append(payload)
-
-    def to_list(self):
-        return self.steps if self.enabled else None
-
-def _debug_trace_enabled(req):
-    try:
-        v = (req.args.get('debug') or req.form.get('debug') or '').strip().lower()
-        return v in ('1', 'true', 'yes', 'y')
-    except Exception:
-        return False
-
 # Config.MODEL_DEVICE를 반영한 디바이스 선택 유틸
 def select_device_from_config():
     mode = str(getattr(Config, 'MODEL_DEVICE', 'auto')).lower()
@@ -76,10 +52,10 @@ def select_device_from_config():
 
 # 모델별 클래스 레이블 정의(초기값). efficientnet은 부팅 시 JSON/폴더에서 보강 로드
 CLASS_LABELS = {
-    "efficientnet": [
-        'Tinea', 'Seborrh Keratoses', 'Rosacea', 'Psoriasis', 'Moles', 
-        'Lupus', 'Lichen', 'Eczema'
-    ],
+    # "efficientnet": [
+    #     'Tinea', 'Seborrh Keratoses', 'Rosacea', 'Psoriasis', 'Moles', 
+    #     'Lupus', 'Lichen', 'Eczema'
+    # ],
     "skin_model": [
         'Acne', 'Actinic Keratosis', 'Benign tumors', 'Bullous', 'Candidiasis',
         'DrugEruption', 'Eczema', 'Infestations Bites', 'Lichen', 'Lupus',
@@ -87,9 +63,9 @@ CLASS_LABELS = {
         'Sun Sunlight Damage', 'Tinea', 'Unknown Normal', 'Vascular Tumors',
         'Vasculitis', 'Vitiligo', 'Warts'
     ],
-    "acne_model": [
-        'Non-Acne', 'Acne'
-    ]
+#     "acne_model": [
+#         'Non-Acne', 'Acne'
+#     ]
 }
 
 def _try_load_labels_for(model_name: str) -> list[str]:
@@ -424,49 +400,20 @@ def health_check():
         'models_loaded': list(models.keys())
     })
 
-@app.route('/api/debug/status', methods=['GET'])
-def debug_status():
-    try:
-        cfg_info = _model_config_info()
-    except Exception:
-        cfg_info = None
-    try:
-        labels_info = {k: (len(v) if isinstance(v, list) else 0) for k, v in CLASS_LABELS.items()}
-    except Exception:
-        labels_info = {}
-    return jsonify({
-        'device': str(device) if device is not None else None,
-        'modelsLoaded': list(models.keys()),
-        'modelConfigInfo': cfg_info,
-        'classLabelsCount': labels_info,
-        'tta': {
-            'enabled': getattr(Config, 'TTA_ENABLED', True),
-            'hflip': getattr(Config, 'TTA_HFLIP', True),
-            'vflip': getattr(Config, 'TTA_VFLIP', False),
-        }
-    })
-
 @app.route('/api/diagnosis/<model_name>', methods=['POST'])
 def diagnosis(model_name):
     """AI 진단 API"""
     # 진단 요청 들어올 때 요청된 모델 및 현재 로드된 모델들 로깅
-    trace = StepTracer(_debug_trace_enabled(request))
-    trace.add('request_received', info={'requestedModel': model_name, 'loadedModels': list(models.keys())})
     logger.info(f"Diagnosis request received. requested_model={model_name}, loaded_models={list(models.keys())}")
 
     if model_name not in models:
         # 상세 진단 정보 준비
         cfg_info = _model_config_info()
         logger.error(f"Requested model '{model_name}' not loaded. Available: {list(models.keys())}. Config info: {cfg_info}")
-        try:
-            trace.add('model_check', status='fail', info={'available': list(models.keys()), 'config': cfg_info})
-        except Exception:
-            pass
         return jsonify({
             'error': f"'{model_name}' 모델을 찾을 수 없습니다.",
             'availableModels': list(models.keys()),
-            'modelConfigInfo': cfg_info,
-            'trace': trace.to_list()
+            'modelConfigInfo': cfg_info
         }), 404
 
     # image/file 키 모두 허용
@@ -490,31 +437,16 @@ def diagnosis(model_name):
                 class_idx = int(class_idx) if class_idx is not None else None
             except Exception:
                 class_idx = None
-            try:
-                trace.add('options_parsed', info={'gradcam': enable_gradcam, 'classIndex': class_idx})
-            except Exception:
-                pass
             
             # 원본 이미지 저장 (GradCAM 용도)
             file.seek(0)  # 파일 포인터를 처음으로 되돌림
             img_bytes = file.read()
             pil_image = Image.open(io.BytesIO(img_bytes)).convert('RGB') if enable_gradcam else None
-            try:
-                _pil_tmp = Image.open(io.BytesIO(img_bytes))
-                _pil_tmp = _pil_tmp.convert('RGB')
-                trace.add('image_loaded', info={'bytes': len(img_bytes) if img_bytes else 0, 'size': _pil_tmp.size})
-            except Exception:
-                trace.add('image_loaded', info={'bytes': len(img_bytes) if img_bytes else 0})
             
             # 이미지 전처리
             file.seek(0)  # 다시 처음으로 되돌림
             image_tensor = preprocess_image(file)
             if image_tensor is None:
-                try:
-                    trace.add('preprocess', status='fail')
-                except Exception:
-                    pass
-                return jsonify({'error': '?��?지 처리 �??�류가 발생?�습?�다.', 'trace': trace.to_list()}), 500
                 return jsonify({'error': '이미지 처리 중 오류가 발생했습니다.'}), 500
             
             # 전처리된 텐서를 선택된 디바이스로 이동 (Config 반영)
@@ -522,18 +454,10 @@ def diagnosis(model_name):
             if device is None:
                 device = select_device_from_config()
             image_tensor = image_tensor.to(device)
-            try:
-                trace.add('device_selected', info={'device': str(device)})
-            except Exception:
-                pass
 
             # 선택된 모델로 예측
             selected_model = models[model_name]
             selected_model = selected_model.to(device)
-            try:
-                trace.add('model_ready', info={'model': model_name})
-            except Exception:
-                pass
 
             # --- TTA 적용: 여러 뷰의 평균 확률 ---
             def softmax_logits(t):
@@ -546,10 +470,6 @@ def diagnosis(model_name):
                 if getattr(Config, 'TTA_VFLIP', False):
                     views.append(torch.flip(image_tensor, dims=[2]))  # 상하
 
-            try:
-                trace.add('tta_views', info={'views': len(views)})
-            except Exception:
-                pass
             probs_sum = None
             with torch.no_grad():
                 for v in views:
@@ -558,26 +478,14 @@ def diagnosis(model_name):
                     probs_sum = prob if probs_sum is None else (probs_sum + prob)
                 probabilities = probs_sum / len(views)
                 probabilities = probabilities[0]
-            try:
-                trace.add('inference', info={'numClasses': int(probabilities.shape[0])})
-            except Exception:
-                pass
             
             # 상위 K개 예측 결과 추출 (클래스 수보다 크지 않게 제한)
             num_classes = probabilities.shape[0]
             top_k = min(3, num_classes)
             top_probs, top_indices = torch.topk(probabilities, top_k)
-            try:
-                trace.add('topk_extracted', info={'k': int(top_k)})
-            except Exception:
-                pass
             
             # 클래스 레이블 가져오기
             labels = CLASS_LABELS.get(model_name, [])
-            try:
-                trace.add('labels_loaded', info={'count': len(labels) if isinstance(labels, list) else 0})
-            except Exception:
-                pass
             
             results = []
             for i in range(top_k):
@@ -617,16 +525,8 @@ def diagnosis(model_name):
                 response = send_to_spring(diagnosis_data, timeout=5)
                 if response is not None:
                     app.logger.info(f"Successfully sent diagnosis to Spring Boot (history saved)")
-                    try:
-                        trace.add('spring_post', info={'status': 'ok', 'statusCode': getattr(response, 'status_code', None)})
-                    except Exception:
-                        pass
                 else:
                     app.logger.warning("Spring Boot save failed or no response returned")
-                    try:
-                        trace.add('spring_post', status='warn', info={'status': 'no_response'})
-                    except Exception:
-                        pass
             except Exception as e:
                 app.logger.error(f"진단 전송 중 예외 발생: {e}")
 
@@ -634,8 +534,7 @@ def diagnosis(model_name):
             response_data = {'results': results}
             if gradcam_result:
                 response_data['gradcam'] = gradcam_result
-            if trace.to_list() is not None:
-                response_data['trace'] = trace.to_list()
+                
             return jsonify(response_data)
 
         except Exception as e:
